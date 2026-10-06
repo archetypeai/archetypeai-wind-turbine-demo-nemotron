@@ -6,7 +6,7 @@ Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archety
 
 A side-by-side live demo of [Archetype AI's Newton](https://www.archetypeai.io/) **Direct Query API** classifying real wind-turbine SCADA telemetry. Three months of data from the Penmanshiel wind farm are replayed at hourly cadence in the browser; each ~21-hour window is embedded by the Omega encoder (one `/query` per channel) and scored by a **local KNN** against an n-shot library of `healthy` / `fault` reference windows — no lens, no session, no SSE plumbing. The verdicts drive the per-turbine state, the anomaly feed, and the SVG blade colours in real time.
 
-**All inference — every state badge, every anomaly feed entry, every blade colour — comes from Newton.** There is no local heuristic; the Flask backend is a thin replay-streamer plus a background Direct-Query classifier (built on the official `archetypeai` Python client).
+**All classification — every state badge, every anomaly feed entry, every blade colour — comes from Newton.** There is no local heuristic; the Flask backend is a thin replay-streamer plus a background Direct-Query classifier (built on the official `archetypeai` Python client). The only other model is NVIDIA Nemotron, which writes the fault briefs and never changes a verdict.
 
 The dataset features a documented frequency-converter outage on **WT01** in early November 2019. Its healthy peer **WT09** runs the same hardware on the same hill in the same minute-by-minute wind. The demo invites you to watch Newton find the difference.
 
@@ -48,10 +48,11 @@ You need **two files** for this demo — the SCADA zip that contains WT01 and WT
 ```bash
 mkdir -p data && cd data
 
-# WT01-10 2019 SCADA (~1.9 GB zipped, includes WT01 + WT09)
+# WT01-10 2019 SCADA (~470 MB zipped, ~1.4 GB extracted; includes WT01 + WT09)
 wget https://zenodo.org/api/records/16807304/files/Penmanshiel_SCADA_2019_WT01-10_3112.zip/content \
     -O Penmanshiel_SCADA_2019_WT01-10_3112.zip
-unzip Penmanshiel_SCADA_2019_WT01-10_3112.zip
+# The zip has no top-level folder — extract into the one data_loader expects.
+unzip Penmanshiel_SCADA_2019_WT01-10_3112.zip -d Penmanshiel_SCADA_2019_WT01-10_3112
 rm Penmanshiel_SCADA_2019_WT01-10_3112.zip
 
 # Static metadata (rated power, hub height, lat/long, etc.)
@@ -67,9 +68,9 @@ After extraction your `data/` directory should look like:
 data/
 ├── Penmanshiel_WT_static.csv
 └── Penmanshiel_SCADA_2019_WT01-10_3112/
-    ├── Turbine_Data_Penmanshiel_01_2019-01-01_-_2020-01-01_1075.csv  # WT01 (faulty)
-    ├── Turbine_Data_Penmanshiel_09_2019-01-01_-_2020-01-01_1075.csv  # WT09 (healthy peer)
-    ├── Turbine_Data_Penmanshiel_02_2019-01-01_-_2020-01-01_1075.csv
+    ├── Turbine_Data_Penmanshiel_01_2019-01-01_-_2020-01-01_1042.csv  # WT01 (faulty)
+    ├── Turbine_Data_Penmanshiel_09_2019-01-01_-_2020-01-01_1049.csv  # WT09 (healthy peer)
+    ├── Turbine_Data_Penmanshiel_02_2019-01-01_-_2020-01-01_1043.csv
     ├── Status_Penmanshiel_01_…csv
     └── … (other turbines and status logs, not used by the demo)
 ```
@@ -82,18 +83,19 @@ At runtime the demo reads only the **WT01** and **WT09** turbine-data CSVs plus 
 
 ## Setup
 
-Requires Python 3.11+ (Archetype AI SDK needs ≥ 3.10), Archetype AI API credentials for staging or prod, and the Penmanshiel dataset.
+Requires Python 3.11+ (Archetype AI SDK needs ≥ 3.10), Archetype AI API credentials, an NVIDIA API key for the briefs (optional — create one at https://build.nvidia.com/settings/api-keys), and the Penmanshiel dataset.
 
 ```bash
 # Clone
-git clone https://github.com/archetypeai/archetypeai-wind-turbine-demo.git
-cd archetypeai-wind-turbine-demo
+git clone https://github.com/archetypeai/archetypeai-wind-turbine-demo-nemotron.git
+cd archetypeai-wind-turbine-demo-nemotron
 
 # Fetch the dataset (see above) into ./data/
 
 # Credentials
 cp .env.example .env
 # Edit .env with your ATAI_API_KEY, ATAI_API_ENDPOINT and NVIDIA_API_KEY (nvapi-…, build.nvidia.com)
+# Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-super-120b-a12b)
 
 # Virtual env
 python3.11 -m venv .venv
@@ -129,6 +131,7 @@ near-instant, so classification begins right away.
   - Numeric stat row (Power / Wind / Rotor RPM / Pitch / Gear oil) in mono with current-window values.
   - Rolling 96-tick power + wind sparkline.
 - **Anomaly feed** (centre column): strong-majority state transitions ("Detected: fault classification", "Recovered: now healthy") with the window range and timestamp. Single 3-2 KNN flickers are intentionally suppressed.
+  - Each fault entry gets an **NVIDIA Nemotron brief** — "Analysing window vs. healthy peer…" while it runs, then the observation, likely cause and 2–3 checks.
 
 <a id="architecture-direct-query--local-knn"></a>
 ## Architecture: Direct Query + local KNN
@@ -189,7 +192,7 @@ The "healthy" peer isn't fault-free either: the replay also flags **WT09 on 2019
 |---|---|
 | `GET /` | The dashboard UI |
 | `GET /api/scada/<wt_id>` | Downsampled 3-month SCADA series for a single turbine (JSON, debug aid) |
-| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction`, `anomaly`, `complete` |
+| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction`, `anomaly`, `nemotron_brief` / `nemotron_error`, `complete` |
 
 `tps` (ticks/sec) clamps to `[1, 200]`; the replay duration scales linearly with it. The UI requests a fixed `tps=15` (the Start button) for a steady ~2.5-minute replay, but the endpoint accepts any value. The background classifier runs ahead of the playhead; `app.py` buffers its predictions and releases each one as the visible timeline reaches its `tick_index`, so predictions stay aligned with playback at any speed.
 
@@ -228,6 +231,7 @@ LICENSE                        # Apache-2.0
 
 - **SCADA data**: Cubico Sustainable Investments, Penmanshiel wind farm. Zenodo records [16807304](https://zenodo.org/records/16807304) (newer) and [5946808](https://zenodo.org/records/5946808) (original); HLRS WindLab [mirror](https://windlab.hlrs.de/dataset/zenodo-16807304/resource/b16ea689-f8ca-4873-bf19-81110daf191c). CC-BY-4.0.
 - **Inference**: Archetype AI Newton Direct Query API (`OmegaEncoder::omega_embeddings_1_4`) with local KNN classification — no lens, no session.
+- **Fault briefs**: NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via the NVIDIA hosted API.
 - **Visual design**: [Archetype AI design system](https://github.com/archetypeai/agent-skills/blob/main/DESIGN.md) — Geist + Geist Mono, OKLCH palette, sharp 2 px radii.
 
 ## License
