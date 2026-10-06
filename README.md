@@ -10,8 +10,6 @@ A side-by-side live demo of [Archetype AI's Newton](https://www.archetypeai.io/)
 
 The dataset features a documented frequency-converter outage on **WT01** in early November 2019. Its healthy peer **WT09** runs the same hardware on the same hill in the same minute-by-minute wind. The demo invites you to watch Newton find the difference.
 
-![Penmanshiel live turbine monitor — dashboard showing WT01 (faulty turbine, healthy state in this frame) and WT09 (healthy peer) side by side with the Anomaly Feed in the middle column showing detected/recovered transitions](images/wind-turbine-monitor.png)
-
 ## What the app does
 
 - **Replays** 2,184 hourly SCADA ticks (2019-09-01 → 2019-12-01) for WT01 + WT09 over an SSE stream, driven by a **Start / Stop** control.
