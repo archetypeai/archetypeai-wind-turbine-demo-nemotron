@@ -136,26 +136,33 @@ near-instant, so classification begins right away.
 
 There is **no lens and no session** in this demo. Each window is embedded with one stateless `POST /v0.5/query` call per channel against the Omega encoder, and classification is a plain k-nearest-neighbour vote against an in-memory reference library — entirely on our side. This is the [`atai-newton-omega-model`](https://github.com/archetypeai/agent-skills/tree/main/skills/atai-newton-omega-model) skill's recommended downstream pattern.
 
-```
-                ┌─────────────────────────────────────────────┐
-                │            Archetype AI Newton              │
-                │   POST /v0.5/query   (stateless, no session)│
-                │   model: OmegaEncoder::omega_embeddings_1_4 │
-                │   normalize_input: false                    │
-                └───────────────▲────────────┬────────────────┘
-                  one /query per │            │ 768-d embedding
-                  channel (×4)   │            │ per channel
-                                 │            ▼
-   ┌─────────────────────────────┴──────────────────────────────┐
-   │  Flask backend (newton_client.BackgroundClassifier)         │
-   │                                                             │
-   │  offline 1×:  reference windows ──► z-score (global scaler) │
-   │  (saved to    ──► embed ──► concat 4 channels ──► library   │
-   │  library.json)                                              │
-   │                                                             │
-   │  per window:  WT01/WT09 slice ──► z-score ──► embed ──►      │
-   │               concat ──► KNN(k=5) vs library ──► {class,vote}│
-   └─────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph offline["Offline, once · build_library.py"]
+        direction LR
+        ref["Reference windows<br/>WT05 fault · WT06/WT09 healthy"] --> zs1["z-score<br/>global scaler"]
+        zs1 --> emb1[["Omega /query<br/>one call per channel ×4"]]
+        emb1 --> lib[("library.json<br/>4×768-d vectors + labels")]
+    end
+
+    subgraph live["Per window · BackgroundClassifier"]
+        direction LR
+        slice["WT01 / WT09 slice<br/>128 rows ≈ 21 h"] --> zs2["z-score<br/>same scaler"]
+        zs2 --> emb2[["Omega /query<br/>one call per channel ×4"]]
+        emb2 --> knn["KNN k=5<br/>class + votes"]
+    end
+
+    subgraph app["app.py"]
+        direction LR
+        anom["Strong-margin<br/>state change → anomaly"] -->|"to = fault"| brief[["NVIDIA Nemotron<br/>window vs. healthy peer"]]
+    end
+
+    lib --> knn
+    knn --> anom
+    ui(["Browser via SSE<br/>verdicts · anomalies · briefs"])
+    knn --> ui
+    anom --> ui
+    brief -->|"observation · cause · checks"| ui
 ```
 
 ### How it works
