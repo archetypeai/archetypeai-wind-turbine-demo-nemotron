@@ -309,7 +309,6 @@ function appendFeedItem(wt, classes, msg, ctx, ts) {
 
 const BRIEF_MODELS = ["nemotron", "newton"];
 const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton C 2.6" };
-const BRIEF_MODEL_SHORT = { nemotron: "Nemotron", newton: "Newton C" };
 let briefModel = "nemotron";
 
 function setBriefModel(model) {
@@ -340,23 +339,12 @@ async function requestBrief(li, model) {
     renderBrief(li);
 }
 
-// "1.5 s", "…" while running, "failed" on error — the model call alone, measured server-side.
-function briefTiming(entry) {
-    if (!entry || entry.state === "pending") return "…";
-    if (entry.state === "error") return "failed";
-    return `${(entry.data.latency_ms / 1000).toFixed(1)} s`;
-}
-
 function renderBrief(li) {
     const box = li.querySelector(".brief");
     const model = briefModel;
-    const other = BRIEF_MODELS.find((m) => m !== model);
     const entry = li.briefs[model];
     const name = BRIEF_MODEL_NAME[model];
-    const label = `
-        <span class="brief-label">${name} brief · ${briefTiming(entry)}
-            <span class="brief-vs">vs ${BRIEF_MODEL_SHORT[other]} ${briefTiming(li.briefs[other])}</span>
-        </span>`;
+    const label = `<span class="brief-label">${name} brief</span>`;
     if (!entry || entry.state === "pending") {
         box.className = "brief pending";
         box.innerHTML = `${label}<span class="brief-body">Analysing window vs. healthy peer…</span>`;

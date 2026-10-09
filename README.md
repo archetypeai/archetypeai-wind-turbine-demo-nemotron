@@ -130,7 +130,7 @@ near-instant, so classification begins right away.
   - Rolling 96-tick power + wind sparkline.
 - **Anomaly feed** (centre column): strong-majority state transitions ("Detected: fault classification", "Recovered: now healthy") with the window range and timestamp. Single 3-2 KNN flickers are intentionally suppressed.
   - Each fault entry gets a **fault brief** — "Analysing window vs. healthy peer…" while it runs, then the observation, likely cause and 2–3 checks.
-  - Each fault is briefed by **both** models in parallel. The **Nemotron / Newton C** toggle in the feed header picks which brief every fault row shows (NVIDIA Nemotron by default) — switching never refetches. Each brief's label shows both response times, e.g. `Newton C 2.6 brief · 2.2 s vs Nemotron 1.8 s`.
+  - Each fault is briefed by **both** models in parallel. The **Nemotron / Newton C** toggle in the feed header picks which brief every fault row shows (NVIDIA Nemotron by default) — switching never refetches.
 
 <a id="architecture-direct-query--local-knn"></a>
 ## Architecture: Direct Query + local KNN
@@ -182,7 +182,7 @@ For every non-silent anomaly whose new state is `fault`, the browser calls `POST
 2. **Calls the selected model** with the same prompt, asking for JSON: `observation`, `likely_cause`, `checks[]`.
    - **Nemotron:** `https://integrate.api.nvidia.com/v1/chat/completions`, reasoning off (`chat_template_kwargs: {enable_thinking: false}`).
    - **Newton C 2.6:** `Newton::c2_6_8b_fp8_260424d7a55d5e` on Archetype's `/query`, with the prompt in `instruction_prompt`.
-   - **Timing:** the call is timed alone — after the SCADA statistics, before parsing — and returned as `latency_ms`; a cached brief keeps the time of the call that produced it. Measured in parallel: WT09 Oct 17 — Nemotron 1.8 s, Newton C 2.6 2.2 s; WT01 Nov 4 — Nemotron ~1.5 s, Newton C 2.6 ~2–5 s. Both models point to the pitch system for WT09 and cite feathered pitch and a stopped rotor for WT01.
+   - **Timing (API only, not shown in the UI):** the call is timed alone — after the SCADA statistics, before parsing — and returned as `latency_ms`; a cached brief keeps the time of the call that produced it. Measured in parallel: WT09 Oct 17 — Nemotron 1.8 s, Newton C 2.6 2.2 s; WT01 Nov 4 — Nemotron ~1.5 s, Newton C 2.6 ~2–5 s. Both models point to the pitch system for WT09 and cite feathered pitch and a stopped rotor for WT01.
 3. **Validates** the reply has all three fields before it reaches the UI; on failure the endpoint returns an error and the row says the model was unavailable for that window.
 
 Neither model sees the turbine status logs, so the cause named is inferred from SCADA alone and is framed as a hypothesis for the operator. Without `NVIDIA_API_KEY` in `.env`, Nemotron briefs show as unavailable; switch the toggle to Newton C, which uses the Archetype key the demo already needs.
