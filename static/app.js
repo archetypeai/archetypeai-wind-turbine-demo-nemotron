@@ -268,7 +268,10 @@ function pushAnomaly(ev) {
                 votes: ev.votes || {},
             });
             li.insertAdjacentHTML("beforeend", `<div class="brief"></div>`);
-            requestBrief(li);
+            li.briefs = {};
+            // Ask both models at once so their timings are comparable; the toggle picks which to show.
+            for (const model of BRIEF_MODELS) requestBrief(li, model);
+            renderBrief(li);
         }
     }
 
@@ -304,7 +307,9 @@ function appendFeedItem(wt, classes, msg, ctx, ts) {
 
 // ---------- fault briefs: NVIDIA Nemotron (default) or Newton C 2.6 ----------
 
+const BRIEF_MODELS = ["nemotron", "newton"];
 const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton C 2.6" };
+const BRIEF_MODEL_SHORT = { nemotron: "Nemotron", newton: "Newton C" };
 let briefModel = "nemotron";
 
 function setBriefModel(model) {
@@ -313,44 +318,60 @@ function setBriefModel(model) {
     document.querySelectorAll("#brief-model button").forEach((b) => {
         b.setAttribute("aria-pressed", String(b.dataset.model === model));
     });
-    // Re-brief every fault already in the feed with the newly selected model (server-cached).
-    document.querySelectorAll("#anomaly-list li[data-brief]").forEach(requestBrief);
+    // Both briefs are already fetched (or in flight) — just re-render every fault row.
+    document.querySelectorAll("#anomaly-list li[data-brief]").forEach(renderBrief);
 }
 
-async function requestBrief(li) {
-    const box = li.querySelector(".brief");
-    const model = briefModel;
-    const name = BRIEF_MODEL_NAME[model];
-    li.dataset.briefModel = model;
-    box.className = "brief pending";
-    box.innerHTML = `
-        <span class="brief-label">${name} brief</span>
-        <span class="brief-body">Analysing window vs. healthy peer…</span>`;
-    let data;
+async function requestBrief(li, model) {
+    li.briefs[model] = { state: "pending" };
     try {
         const res = await fetch("/api/brief", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ ...JSON.parse(li.dataset.brief), model }),
         });
-        data = await res.json();
+        const data = await res.json();
         if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        li.briefs[model] = { state: "done", data };
     } catch (err) {
-        if (li.dataset.briefModel !== model) return; // the toggle moved on; a newer request owns this row
-        box.className = "brief error";
-        box.innerHTML = `
-            <span class="brief-label">${name} brief</span>
-            <span class="brief-body">${name} unavailable for this window.</span>`;
+        li.briefs[model] = { state: "error" };
         console.warn("brief failed", model, err);
+    }
+    renderBrief(li);
+}
+
+// "1.5 s", "…" while running, "failed" on error — the model call alone, measured server-side.
+function briefTiming(entry) {
+    if (!entry || entry.state === "pending") return "…";
+    if (entry.state === "error") return "failed";
+    return `${(entry.data.latency_ms / 1000).toFixed(1)} s`;
+}
+
+function renderBrief(li) {
+    const box = li.querySelector(".brief");
+    const model = briefModel;
+    const other = BRIEF_MODELS.find((m) => m !== model);
+    const entry = li.briefs[model];
+    const name = BRIEF_MODEL_NAME[model];
+    const label = `
+        <span class="brief-label">${name} brief · ${briefTiming(entry)}
+            <span class="brief-vs">vs ${BRIEF_MODEL_SHORT[other]} ${briefTiming(li.briefs[other])}</span>
+        </span>`;
+    if (!entry || entry.state === "pending") {
+        box.className = "brief pending";
+        box.innerHTML = `${label}<span class="brief-body">Analysing window vs. healthy peer…</span>`;
         return;
     }
-    if (li.dataset.briefModel !== model) return;
-    const checks = (data.checks || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("");
+    if (entry.state === "error") {
+        box.className = "brief error";
+        box.innerHTML = `${label}<span class="brief-body">${name} unavailable for this window.</span>`;
+        return;
+    }
+    const checks = (entry.data.checks || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("");
     box.className = "brief";
-    box.innerHTML = `
-        <span class="brief-label">${name} brief</span>
-        <span class="brief-body">${escapeHtml(data.observation)}</span>
-        <span class="brief-cause">${escapeHtml(data.likely_cause)}</span>
+    box.innerHTML = `${label}
+        <span class="brief-body">${escapeHtml(entry.data.observation)}</span>
+        <span class="brief-cause">${escapeHtml(entry.data.likely_cause)}</span>
         <ul class="brief-checks">${checks}</ul>`;
 }
 

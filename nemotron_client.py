@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 import urllib.error
 import urllib.request
 from functools import lru_cache
@@ -176,8 +177,11 @@ def fault_brief(turbine: str, peer: str, window_start: str, window_end: str, vot
         f"WT{turbine}": window_stats(turbine, window_start, window_end, data_start, data_end),
         f"WT{peer}": window_stats(peer, window_start, window_end, data_start, data_end),
     }
+    # Time the model call alone (not the SCADA stats above, not parsing) so the two models compare fairly.
+    started = time.perf_counter()
     if which == "newton":
         reply, model_id = _newton_chat(SYSTEM_PROMPT, json.dumps(payload)), NEWTON_MODEL
     else:
         reply, model_id = _chat(SYSTEM_PROMPT, json.dumps(payload)), model()
-    return {**_parse(reply), "model": model_id, "which": which}
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    return {**_parse(reply), "model": model_id, "which": which, "latency_ms": latency_ms}

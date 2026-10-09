@@ -547,6 +547,7 @@ body {
     text-transform: uppercase;
     color: var(--good);
 }
+.feed li .brief-vs { color: var(--fg-muted); margin-left: 6px; }
 .feed li .brief-body { color: var(--fg); line-height: 1.4; }
 .feed li .brief-cause { color: var(--fg-muted); line-height: 1.4; }
 .feed li .brief-checks {
