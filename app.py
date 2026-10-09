@@ -9,18 +9,20 @@ the browser reads, paced onto the replay timeline.
 Endpoints:
     GET /                       UI
     GET /api/scada/<wt_id>      Downsampled rows for initial chart
-    GET /api/replay?tps=N       SSE: meta, tick, newton_status, newton_prediction, anomaly,
-                                     nemotron_brief, complete
+    GET /api/replay?tps=N       SSE: meta, tick, newton_status, newton_prediction, anomaly, complete
+    POST /api/brief             Fault brief for one window: {turbine, window_start, window_end,
+                                votes, model: "nemotron" | "newton"}
 
-When a turbine is committed to `fault`, NVIDIA Nemotron writes an operator brief
-for that window (nemotron_client), compared against the healthy peer turbine.
+When a turbine is committed to `fault`, the browser asks /api/brief for an operator
+brief on that window, compared against the healthy peer turbine (nemotron_client).
+NVIDIA Nemotron is the default; the feed's toggle switches to Newton C 2.6.
 """
 from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Iterator
 
 from dotenv import load_dotenv
@@ -33,7 +35,9 @@ load_dotenv()
 
 app = Flask(__name__)
 logger = logging.getLogger(__name__)
-brief_pool = ThreadPoolExecutor(max_workers=2)
+# Briefs cached per (model, turbine, window) — switching models back and forth is instant.
+_brief_cache: dict[tuple, dict] = {}
+_brief_lock = threading.Lock()
 
 # A verdict only commits if the KNN winner leads the runner-up by this many
 # votes — filters out weak (e.g. 3-2) ties that are noise on an n-shot library.
@@ -46,6 +50,7 @@ def index() -> str:
         "index.html",
         wt_a=nc.DEMO_WT_A,
         wt_b=nc.DEMO_WT_B,
+        nemotron_enabled=nemo.enabled("nemotron"),
         start=nc.DEMO_START,
         end=nc.DEMO_END,
     )
@@ -87,7 +92,38 @@ def _anomaly_from(pred: dict, committed: dict[str, str | None]) -> dict | None:
         # silent → flip the panel state but don't add a feed row (baseline healthy).
         "initial": initial, "silent": initial and new_class != "fault",
         "window_start": pred.get("window_start"), "window_end": pred.get("window_end"),
+        "votes": votes,
     }
+
+
+@app.route("/api/brief", methods=["POST"])
+def brief():
+    """Operator brief for one flagged window, from the model the feed's toggle selects."""
+    body = request.get_json(silent=True) or {}
+    wt, which = body.get("turbine"), body.get("model", "nemotron")
+    start, end = body.get("window_start"), body.get("window_end")
+    if wt not in (nc.DEMO_WT_A, nc.DEMO_WT_B) or not start or not end:
+        return jsonify({"error": "turbine, window_start and window_end are required"}), 400
+    if which not in nemo.MODELS:
+        return jsonify({"error": f"Unknown model: {which}"}), 400
+    if not nemo.enabled(which):
+        key = "NVIDIA_API_KEY" if which == "nemotron" else "ATAI_API_KEY"
+        return jsonify({"error": f"{key} is not set"}), 503
+
+    cache_key = (which, wt, start, end)
+    with _brief_lock:
+        if cache_key in _brief_cache:
+            return jsonify({**_brief_cache[cache_key], "cached": True})
+    peer = nc.DEMO_WT_B if wt == nc.DEMO_WT_A else nc.DEMO_WT_A
+    try:
+        result = nemo.fault_brief(wt, peer, start, end, body.get("votes") or {},
+                                  nc.DEMO_START, nc.DEMO_END, which=which)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("%s brief failed: %s", which, exc)
+        return jsonify({"error": str(exc)}), 502
+    with _brief_lock:
+        _brief_cache[cache_key] = result
+    return jsonify({**result, "cached": False})
 
 
 @app.route("/api/replay")
@@ -115,31 +151,6 @@ def replay():
 
         committed: dict[str, str | None] = {nc.DEMO_WT_A: None, nc.DEMO_WT_B: None}
         pending: list[dict] = []  # predictions whose tick_index hasn't been reached yet
-        briefs: list[tuple[dict, Future]] = []  # Nemotron briefs in flight
-
-        def request_brief(anom: dict, votes: dict) -> None:
-            wt = anom["turbine"]
-            peer = nc.DEMO_WT_B if wt == nc.DEMO_WT_A else nc.DEMO_WT_A
-            anom["brief"] = "pending"
-            fut = brief_pool.submit(
-                nemo.fault_brief, wt, peer, anom["window_start"], anom["window_end"], votes,
-                nc.DEMO_START, nc.DEMO_END,
-            )
-            briefs.append((anom, fut))
-
-        def finished_briefs() -> list[dict]:
-            out: list[dict] = []
-            for item in [b for b in briefs if b[1].done()]:
-                briefs.remove(item)
-                anom, fut = item
-                key = {"turbine": anom["turbine"], "window_start": anom["window_start"]}
-                try:
-                    out.append({"kind": "nemotron_brief", **key, **fut.result()})
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Nemotron brief failed: %s", exc)
-                    out.append({"kind": "nemotron_error", **key, "message": str(exc)})
-            return out
-
         def absorb() -> list[dict]:
             """Pull classifier events; buffer predictions, pass status/errors through."""
             passthrough: list[dict] = []
@@ -159,8 +170,6 @@ def replay():
                 out.append(p)
                 anom = _anomaly_from(p, committed)
                 if anom:
-                    if anom["to"] == "fault" and nemo.enabled():
-                        request_brief(anom, p.get("votes") or {})
                     out.append(anom)
             return out
 
@@ -169,7 +178,7 @@ def replay():
             last = time.time()
             for ev in ev_iter:
                 yield sse(ev)
-                for e in absorb() + finished_briefs():
+                for e in absorb():
                     yield sse(e)
                 if ev.get("kind") == "tick":
                     for e in release(ev.get("i", 0)):
@@ -184,9 +193,9 @@ def replay():
             while time.time() < deadline:
                 for e in absorb():
                     yield sse(e)
-                for e in release(total_ticks) + finished_briefs():
+                for e in release(total_ticks):
                     yield sse(e)
-                if clf.done and not pending and not briefs:
+                if clf.done and not pending:
                     break
                 time.sleep(0.2)
                 yield ": keepalive\n\n"

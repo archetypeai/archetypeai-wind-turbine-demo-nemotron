@@ -196,10 +196,6 @@ function handle(ev) {
         case "anomaly":
             pushAnomaly(ev);
             break;
-        case "nemotron_brief":
-        case "nemotron_error":
-            applyBrief(ev);
-            break;
         case "newton_status":
             newtonState[ev.turbine] = ev.stage;
             setNewtonBadge();
@@ -264,13 +260,15 @@ function pushAnomaly(ev) {
             ? `window ${ev.window_start.slice(5, 16)} → ${ev.window_end.slice(5, 16)}`
             : "";
         const li = appendFeedItem(ev.turbine, cls, ev.message, ctx, ev.ts);
-        if (ev.brief === "pending") {
-            li.dataset.briefKey = briefKey(ev);
-            li.insertAdjacentHTML("beforeend", `
-                <div class="brief pending">
-                    <span class="brief-label">NVIDIA Nemotron brief</span>
-                    <span class="brief-body">Analysing window vs. healthy peer…</span>
-                </div>`);
+        if (ev.to === "fault") {
+            li.dataset.brief = JSON.stringify({
+                turbine: ev.turbine,
+                window_start: ev.window_start,
+                window_end: ev.window_end,
+                votes: ev.votes || {},
+            });
+            li.insertAdjacentHTML("beforeend", `<div class="brief"></div>`);
+            requestBrief(li);
         }
     }
 
@@ -304,28 +302,61 @@ function appendFeedItem(wt, classes, msg, ctx, ts) {
     return li;
 }
 
-function briefKey(ev) {
-    return `${ev.turbine}|${ev.window_start}`;
+// ---------- fault briefs: NVIDIA Nemotron (default) or Newton C 2.6 ----------
+
+const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton C 2.6" };
+let briefModel = "nemotron";
+
+function setBriefModel(model) {
+    if (model === briefModel) return;
+    briefModel = model;
+    document.querySelectorAll("#brief-model button").forEach((b) => {
+        b.setAttribute("aria-pressed", String(b.dataset.model === model));
+    });
+    // Re-brief every fault already in the feed with the newly selected model (server-cached).
+    document.querySelectorAll("#anomaly-list li[data-brief]").forEach(requestBrief);
 }
 
-function applyBrief(ev) {
-    const li = document.querySelector(`#anomaly-list li[data-brief-key="${CSS.escape(briefKey(ev))}"]`);
-    const box = li && li.querySelector(".brief");
-    if (!box) return;
-    box.classList.remove("pending");
-    if (ev.kind === "nemotron_error") {
-        box.classList.add("error");
-        box.querySelector(".brief-body").textContent = "Nemotron unavailable for this window.";
-        console.warn("nemotron_error", ev);
+async function requestBrief(li) {
+    const box = li.querySelector(".brief");
+    const model = briefModel;
+    const name = BRIEF_MODEL_NAME[model];
+    li.dataset.briefModel = model;
+    box.className = "brief pending";
+    box.innerHTML = `
+        <span class="brief-label">${name} brief</span>
+        <span class="brief-body">Analysing window vs. healthy peer…</span>`;
+    let data;
+    try {
+        const res = await fetch("/api/brief", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...JSON.parse(li.dataset.brief), model }),
+        });
+        data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    } catch (err) {
+        if (li.dataset.briefModel !== model) return; // the toggle moved on; a newer request owns this row
+        box.className = "brief error";
+        box.innerHTML = `
+            <span class="brief-label">${name} brief</span>
+            <span class="brief-body">${name} unavailable for this window.</span>`;
+        console.warn("brief failed", model, err);
         return;
     }
-    const checks = (ev.checks || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("");
+    if (li.dataset.briefModel !== model) return;
+    const checks = (data.checks || []).map((c) => `<li>${escapeHtml(c)}</li>`).join("");
+    box.className = "brief";
     box.innerHTML = `
-        <span class="brief-label">NVIDIA Nemotron brief</span>
-        <span class="brief-body">${escapeHtml(ev.observation)}</span>
-        <span class="brief-cause">${escapeHtml(ev.likely_cause)}</span>
+        <span class="brief-label">${name} brief</span>
+        <span class="brief-body">${escapeHtml(data.observation)}</span>
+        <span class="brief-cause">${escapeHtml(data.likely_cause)}</span>
         <ul class="brief-checks">${checks}</ul>`;
 }
+
+document.querySelectorAll("#brief-model button").forEach((b) => {
+    b.addEventListener("click", () => setBriefModel(b.dataset.model));
+});
 
 // Match the server-side STRONG_MARGIN filter: only verdicts with the winning
 // class ahead by ≥3 votes change the badge class / trigger the pulse. Weak

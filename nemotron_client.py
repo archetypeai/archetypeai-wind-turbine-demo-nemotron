@@ -1,10 +1,15 @@
-"""Fault briefs from NVIDIA Nemotron on NVIDIA's hosted API (OpenAI-compatible).
+"""Fault briefs from NVIDIA Nemotron (default) or Newton C 2.6.
 
 When Omega + KNN commits a turbine to `fault`, `fault_brief()` summarises the
-flagged window against the healthy peer turbine over the same hours and asks
-Nemotron for a short operator brief: what changed, the likely cause, what to
-check. Nemotron only sees SCADA statistics and the KNN vote — never the status
-logs, so the cause it names is inferred, not looked up.
+flagged window against the healthy peer turbine over the same hours and asks a
+reasoning model for a short operator brief: what changed, the likely cause, what
+to check. The model only sees SCADA statistics and the KNN vote — never the
+status logs, so the cause it names is inferred, not looked up.
+
+  model="nemotron"  NVIDIA Nemotron on NVIDIA's hosted API (OpenAI-compatible)
+  model="newton"    Newton C 2.6 on Archetype's /query (system prompt in instruction_prompt)
+
+Both get the same prompt and the same validation.
 """
 from __future__ import annotations
 
@@ -20,6 +25,8 @@ from data_loader import discover_turbines, load_turbine_window
 
 DEFAULT_ENDPOINT = "https://integrate.api.nvidia.com/v1"
 DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+NEWTON_MODEL = "Newton::c2_6_8b_fp8_260424d7a55d5e"
+MODELS = ("nemotron", "newton")
 TIMEOUT = 60
 
 # A turbine is "stopped in wind" when there is enough wind to generate but it doesn't.
@@ -65,7 +72,9 @@ def model() -> str:
     return os.getenv("NEMOTRON_MODEL") or DEFAULT_MODEL
 
 
-def enabled() -> bool:
+def enabled(which: str = "nemotron") -> bool:
+    if which == "newton":
+        return bool(os.getenv("ATAI_API_KEY"))
     return bool(os.getenv("NVIDIA_API_KEY"))
 
 
@@ -121,6 +130,30 @@ def _chat(system: str, user: str, max_tokens: int = 600) -> str:
     return (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
 
 
+def _newton_chat(system: str, user: str, max_new_tokens: int = 600) -> str:
+    """Newton C 2.6 on /query via the same official client the Omega calls use."""
+    from newton_client import _get_client
+
+    client = _get_client()
+    payload = client.requests_post(
+        f"{client.api_endpoint}/query",
+        data_payload=json.dumps({
+            "query": user,
+            "instruction_prompt": system,  # C 2.6 ignores the legacy system_prompt field
+            "file_ids": [],
+            "model": NEWTON_MODEL,
+            "max_new_tokens": max_new_tokens,
+        }),
+        additional_headers={"Content-Type": "application/json"},
+    )
+    response = payload.get("response")
+    if isinstance(response, dict):
+        response = response.get("response")
+    if isinstance(response, list):
+        response = response[0] if response else ""
+    return response if isinstance(response, str) else ""
+
+
 def _parse(text: str) -> dict:
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
@@ -133,8 +166,8 @@ def _parse(text: str) -> dict:
 
 
 def fault_brief(turbine: str, peer: str, window_start: str, window_end: str, votes: dict,
-                data_start: str, data_end: str) -> dict:
-    """Ask Nemotron for an operator brief on a flagged window. Returns the parsed brief."""
+                data_start: str, data_end: str, which: str = "nemotron") -> dict:
+    """Ask the chosen model for an operator brief on a flagged window. Returns the parsed brief."""
     payload = {
         "flagged_turbine": f"WT{turbine}",
         "healthy_peer": f"WT{peer}",
@@ -143,5 +176,8 @@ def fault_brief(turbine: str, peer: str, window_start: str, window_end: str, vot
         f"WT{turbine}": window_stats(turbine, window_start, window_end, data_start, data_end),
         f"WT{peer}": window_stats(peer, window_start, window_end, data_start, data_end),
     }
-    reply = _chat(SYSTEM_PROMPT, json.dumps(payload))
-    return {**_parse(reply), "model": model()}
+    if which == "newton":
+        reply, model_id = _newton_chat(SYSTEM_PROMPT, json.dumps(payload)), NEWTON_MODEL
+    else:
+        reply, model_id = _chat(SYSTEM_PROMPT, json.dumps(payload)), model()
+    return {**_parse(reply), "model": model_id, "which": which}

@@ -435,6 +435,34 @@ body {
     text-transform: uppercase;
     animation: pulse 1.5s ease-in-out infinite;
 }
+.feed-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+/* Two-option segmented toggle; the pressed option is filled. */
+.model-toggle {
+    display: inline-flex;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+}
+.model-toggle button {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    padding: 4px 10px;
+    background: transparent;
+    color: var(--fg-muted);
+    border: 0;
+    cursor: pointer;
+}
+.model-toggle button + button { border-left: 1px solid var(--border); }
+.model-toggle button:hover { color: var(--fg); }
+.model-toggle button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.model-toggle button:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
 .feed-desc {
     margin: 0;
     font-size: 11px;
