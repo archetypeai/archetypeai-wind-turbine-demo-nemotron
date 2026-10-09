@@ -451,9 +451,9 @@ body {
 }
 .model-toggle button {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 12px;
     letter-spacing: 0.04em;
-    padding: 4px 10px;
+    padding: 5px 12px;
     background: transparent;
     color: var(--fg-muted);
     border: 0;
