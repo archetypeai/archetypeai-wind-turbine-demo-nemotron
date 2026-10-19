@@ -4,7 +4,7 @@ Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archety
 
 ![Anomaly feed with an NVIDIA Nemotron brief under WT09's Oct 17 fault: 78 kW vs WT01's 516 kW, pitch 57° (feathered), stopped 13.2 h in wind — suggests a pitch-system fault or safety trip, with three checks](images/wind-turbine-nemotron-brief.png)
 
-A side-by-side live demo of [Archetype AI's Newton](https://www.archetypeai.io/) **Direct Query API** classifying real wind-turbine SCADA telemetry. Three months of data from the Penmanshiel wind farm are replayed at hourly cadence in the browser; each ~21-hour window is embedded by the Omega encoder (one `/query` per channel) and scored by a **local KNN** against an n-shot library of `healthy` / `fault` reference windows — no lens, no session, no SSE plumbing. The verdicts drive the per-turbine state, the anomaly feed, and the SVG blade colours in real time.
+A side-by-side live demo of [Archetype AI's Newton](https://www.archetypeai.io/) **Direct Query API** classifying real wind-turbine SCADA telemetry. Three months of data from the Penmanshiel wind farm are replayed at hourly cadence in the browser; each ~21-hour window is embedded by the Omega encoder (one `/api/lens/query` per channel) and scored by a **local KNN** against an n-shot library of `healthy` / `fault` reference windows — no lens, no session, no SSE plumbing. The verdicts drive the per-turbine state, the anomaly feed, and the SVG blade colours in real time.
 
 **All classification — every state badge, every anomaly feed entry, every blade colour — comes from Newton.** There is no local heuristic; the Flask backend is a thin replay-streamer plus a background Direct-Query classifier (built on the official `archetypeai` Python client). The only other model writes the fault briefs and never changes a verdict: NVIDIA Nemotron by default, or Newton C 2.6 via the feed's toggle.
 
@@ -95,8 +95,9 @@ cp .env.example .env
 # Edit .env with your ATAI_API_KEY, ATAI_API_ENDPOINT and NVIDIA_API_KEY (nvapi-…, build.nvidia.com)
 # Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-super-120b-a12b)
 
-# Virtual env
-python3.11 -m venv .venv
+# Virtual env — use whichever python3 you have (verified on 3.12 and 3.14).
+# No `activate` step: every command below calls .venv/bin/ explicitly.
+python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 
 # Precompute the n-shot reference library once (writes library.json)
@@ -135,7 +136,7 @@ near-instant, so classification begins right away.
 <a id="architecture-direct-query--local-knn"></a>
 ## Architecture: Direct Query + local KNN
 
-There is **no lens and no session** in this demo. Each window is embedded with one stateless `POST /v0.5/query` call per channel against the Omega encoder, and classification is a plain k-nearest-neighbour vote against an in-memory reference library — entirely on our side. This is the [`atai-newton-omega-model`](https://github.com/archetypeai/agent-skills/tree/main/skills/atai-newton-omega-model) skill's recommended downstream pattern.
+There is **no lens and no session** in this demo. Each window is embedded with one stateless `POST /api/lens/query` call per channel against the Omega encoder, and classification is a plain k-nearest-neighbour vote against an in-memory reference library — entirely on our side. This is the [`atai-newton-omega-model`](https://github.com/archetypeai/agent-skills/tree/main/skills/atai-newton-omega-model) skill's recommended downstream pattern.
 
 ```mermaid
 flowchart TB
@@ -234,7 +235,7 @@ LICENSE                        # Apache-2.0
 ## Lessons learned
 
 - **Leakage discipline drives accuracy, not model tuning.** The first build classified almost everything backwards because the fault reference (WT05, Mar 7–17) was mostly *non-fault* hours and the only healthy reference was summer-only — so the KNN keyed on season and turbine identity, not on fault. Tightening the fault reference to WT05's sustained ~36 h outage, adding an autumn healthy baseline (WT06 Oct) to match the live season, and capping the healthy class fixed it. `_assert_disjoint()` enforces the rule in code.
-- **No lens, no session — Direct Query is simpler and stateless.** Embedding each window with `POST /v0.5/query` and running KNN locally removes the entire lens-runner orchestration (sessions, runner quotas, push pacing, orphan cleanup) that the earlier lens-based build wrestled with. See the [`atai-newton-omega-model`](https://github.com/archetypeai/agent-skills/tree/main/skills/atai-newton-omega-model) skill.
+- **No lens, no session — Direct Query is simpler and stateless.** Embedding each window with `POST /api/lens/query` and running KNN locally removes the entire lens-runner orchestration (sessions, runner quotas, push pacing, orphan cleanup) that the earlier lens-based build wrestled with. See the [`atai-newton-omega-model`](https://github.com/archetypeai/agent-skills/tree/main/skills/atai-newton-omega-model) skill.
 - **`normalize_input: false` + a fitted global scaler** preserves cross-window amplitude so a stopped turbine looks different from a running one — the skill's recommended downstream pattern.
 
 ## Credits

@@ -1,7 +1,7 @@
 """Penmanshiel turbine anomaly detection via Newton's Direct Query API.
 
 No lenses, no sessions, no SSE plumbing: each window is classified with the
-`atai-newton-omega-model` pattern — per-channel Omega embeddings over `/query`,
+`atai-newton-omega-model` pattern — per-channel Omega embeddings over `/api/lens/query`,
 scored by a local KNN against an n-shot library of reference windows.
 
 - `replay_events()` streams raw SCADA ticks (no inference).
@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import queue
 import random
 import threading
@@ -97,7 +98,7 @@ OMEGA_TIMEOUT = 30
 
 # Precomputed n-shot library (atai-newton-omega-model-data-prep pattern): the
 # reference set is static, so embed it offline once with `python build_library.py`
-# and load the (scaler + vectors) from disk at runtime — no /query calls or
+# and load the (scaler + vectors) from disk at runtime — no /api/lens/query calls or
 # "Building reference library…" wait on cold start. Falls back to a live build
 # if the file is missing or its config fingerprint no longer matches.
 LIBRARY_PATH = os.path.join(os.path.dirname(__file__), "library.json")
@@ -111,13 +112,17 @@ class TurbineRequest:
 
 
 def _resolve_endpoint(raw: str) -> str:
-    base = (raw or "").rstrip("/")
+    """Reduce ATAI_API_ENDPOINT to a root and append /api.
+
+    Every API surface lives under one versionless /api prefix, so a single
+    client serves them all. Accept a bare root, a /vX.Y suffix or /api itself,
+    so one .env works whichever form you have.
+    """
+    base = re.sub(r"/api(/lens)?$", "", (raw or "").rstrip("/"))
+    base = re.sub(r"/v[0-9]+(\.[0-9]+)*$", "", base)
     if not base:
         raise RuntimeError("ATAI_API_ENDPOINT is not set")
-    last_seg = base.rsplit("/", 1)[-1]
-    if not last_seg.startswith("v"):
-        base = base + "/v0.5"
-    return base
+    return base + "/api"
 
 
 def window_to_records(wt_id: str, start: str = DEMO_START, end: str = DEMO_END) -> list[dict]:
@@ -250,7 +255,7 @@ def _scale_frame(df: pd.DataFrame) -> pd.DataFrame:
 # ---------- Direct Query Omega embedding + local KNN ----------
 
 # Official Archetype AI Python client, per the atai-newton-omega-model skill's
-# references/_common.py (the /query POST goes through the client's retrying
+# references/_common.py (the /api/lens/query POST goes through the client's retrying
 # transport). Built once, lazily.
 _client_lock = threading.Lock()
 _client: ArchetypeAI | None = None
@@ -269,7 +274,7 @@ def _get_client() -> ArchetypeAI:
 
 
 def _embed_channel(channel: list[float]) -> list[float]:
-    """One /query per channel → flat 768-d vector, via the official client. Retries transient failures."""
+    """One /api/lens/query per channel → flat 768-d vector, via the official client. Retries transient failures."""
     client = _get_client()
     body = json.dumps({
         "query": "",
@@ -281,7 +286,7 @@ def _embed_channel(channel: list[float]) -> list[float]:
     for attempt in range(OMEGA_RETRIES):
         try:
             payload = client.requests_post(
-                f"{client.api_endpoint}/query",
+                f"{client.api_endpoint}/lens/query",
                 data_payload=body,
                 additional_headers={"Content-Type": "application/json"},
             )
@@ -364,7 +369,7 @@ def _library_fingerprint() -> dict:
 
 
 def _build_library_live() -> list[tuple[list[float], str]]:
-    """Embed the n-shot reference windows via Omega `/query` → KNN library of (vec, label).
+    """Embed the n-shot reference windows via Omega `/api/lens/query` → KNN library of (vec, label).
 
     Healthy windows are abundant; fault windows come from one short sustained
     outage. We cap healthy to HEALTHY_CAP so the (few) fault windows aren't
