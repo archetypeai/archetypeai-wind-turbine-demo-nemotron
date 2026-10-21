@@ -1,0 +1,76 @@
+{# "How it works" dialog: one diagram of the offline library, per-window classification, and fault briefs. #}
+{% macro box(x, y, title, sub1, sub2='', kind='', h=58) -%}
+<g class="dg-box {{ kind }}">
+    <rect x="{{ x }}" y="{{ y }}" width="140" height="{{ h }}" rx="2" />
+    <text class="dg-title" x="{{ x + 70 }}" y="{{ y + (20 if sub2 else 24) }}">{{ title }}</text>
+    <text class="dg-sub" x="{{ x + 70 }}" y="{{ y + (36 if sub2 else 41) }}">{{ sub1 }}</text>
+    {% if sub2 %}<text class="dg-sub" x="{{ x + 70 }}" y="{{ y + 49 }}">{{ sub2 }}</text>{% endif %}
+</g>
+{%- endmacro %}
+<dialog class="about" id="about" aria-labelledby="about-title">
+    <div class="about-head">
+        <h2 id="about-title">How it works</h2>
+        <button type="button" class="about-close" id="about-close" aria-label="Close">✕</button>
+    </div>
+    <div class="diagram-scroll">
+    <svg class="diagram" viewBox="0 36 990 400" role="img"
+         aria-label="Reference windows are embedded once into a KNN library. Each live window is z-scored, embedded by Newton and classified by KNN. A strong change to fault triggers briefs from Nemotron and Newton in parallel.">
+        <defs>
+            <marker id="dg-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M0 0 L8 4 L0 8 z" />
+            </marker>
+        </defs>
+
+        <g class="dg-lanes">
+            <line x1="0" y1="140" x2="990" y2="140" />
+            <line x1="0" y1="252" x2="990" y2="252" />
+            <line x1="0" y1="396" x2="990" y2="396" />
+        </g>
+        <text class="dg-lane" x="16" y="84">Offline</text>
+        <text class="dg-lane" x="16" y="98">once</text>
+        <text class="dg-lane" x="16" y="196">Every</text>
+        <text class="dg-lane" x="16" y="210">window</text>
+        <text class="dg-lane" x="16" y="314">On a</text>
+        <text class="dg-lane" x="16" y="328">fault</text>
+
+        {# Lane 1: build the KNN library #}
+        {{ box(150, 60, "Reference windows", "WT05 fault", "WT06 · WT09 healthy") }}
+        {{ box(318, 60, "z-score", "global scaler") }}
+        {{ box(486, 60, "Newton", "4 channels × 768-d", kind="omega") }}
+        {{ box(654, 60, "library.json", "18 healthy · 8 fault") }}
+        {{ box(822, 60, "Embedding panel", "PCA-2 of library", "+ live windows") }}
+
+        {# Lane 2: classify each live window #}
+        {{ box(150, 168, "Turbine sensor data", "WT01 · WT09", "128 rows ≈ 21 h") }}
+        {{ box(318, 168, "z-score", "same scaler") }}
+        {{ box(486, 168, "Newton", "/api/lens/query ×4", kind="omega") }}
+        {{ box(654, 168, "KNN k=5", "vote vs library") }}
+        {{ box(822, 168, "Verdict", "healthy / fault", "+ vote counts") }}
+
+        {# Lane 3: brief a fault #}
+        {{ box(150, 290, "State change", "winner ≥3 votes ahead", kind="fault") }}
+        {{ box(318, 290, "Window stats", "flagged vs peer", "same hours, same wind") }}
+        {{ box(486, 264, "NVIDIA Nemotron", "3 Ultra · hosted API", kind="nemotron", h=48) }}
+        {{ box(486, 322, "Newton", "Archetype /query", kind="newton", h=48) }}
+        {{ box(654, 290, "Fault brief", "observation · cause", "2–3 checks") }}
+        {{ box(822, 290, "Anomaly feed", "toggle picks model") }}
+
+        <g class="dg-arrows">
+            <path d="M290 89 H318" /><path d="M458 89 H486" /><path d="M626 89 H654" /><path d="M794 89 H822" />
+            <path d="M290 197 H318" /><path d="M458 197 H486" /><path d="M626 197 H654" /><path d="M794 197 H822" />
+            <path d="M724 118 V168" />
+            <path d="M892 168 V118" />
+            <path d="M892 226 V242 H220 V290" />
+            <path d="M290 319 H318" />
+            <path d="M458 312 L486 288" /><path d="M458 326 L486 346" />
+            <path d="M626 288 L654 312" /><path d="M626 346 L654 326" />
+            <path d="M794 319 H822" />
+        </g>
+        <text class="dg-note" x="756" y="147">library</text>
+        <text class="dg-note" x="922" y="147">coords</text>
+        <text class="dg-note" x="556" y="386">both in parallel</text>
+
+        <text class="dg-foot" x="495" y="422">Ticks, verdicts and anomalies stream to the browser over SSE (/api/replay) · briefs come from POST /api/brief</text>
+    </svg>
+    </div>
+</dialog>

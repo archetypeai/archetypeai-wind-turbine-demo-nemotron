@@ -154,6 +154,7 @@ function connect(tps) {
         v.querySelector(".nv-class").textContent = "—";
         v.querySelector(".nv-votes").textContent = "";
     }
+    resetEmbedTrails();
     sse = new EventSource(`/api/replay?tps=${tps}`);
     sse.onmessage = (e) => {
         try { handle(JSON.parse(e.data)); } catch (err) { console.warn("parse", err, e.data); }
@@ -308,7 +309,7 @@ function appendFeedItem(wt, classes, msg, ctx, ts) {
 // ---------- fault briefs: NVIDIA Nemotron (default) or Newton C 2.6 ----------
 
 const BRIEF_MODELS = ["nemotron", "newton"];
-const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton C 2.6" };
+const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton" };
 let briefModel = "nemotron";
 
 function setBriefModel(model) {
@@ -374,6 +375,7 @@ document.querySelectorAll("#brief-model button").forEach((b) => {
 const STRONG_MARGIN = 3;
 
 function applyNewtonPrediction(ev) {
+    pushEmbedPoint(ev);
     const p = panels[ev.turbine];
     if (!p) return;
     p.newtonCount += 1;
@@ -422,6 +424,116 @@ function setField(node, val) { if (node) node.textContent = val; }
 function escapeHtml(s) {
     return String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 }
+
+// ---------- Omega embedding panel (PCA-2 of the KNN library + live trail) ----------
+
+const EMBED_COLORS = {
+    healthy: "oklch(0.822 0.208 146.907 / 0.9)",
+    fault: "oklch(0.641 0.214 25.595 / 0.9)",
+    trail: "rgba(160, 160, 160, 0.45)",
+    ring: "rgba(255, 255, 255, 0.85)",
+};
+const embedCharts = {};
+
+function makeEmbedChart(canvas) {
+    const libPoint = (label) => ({
+        label: `${label} (library)`,
+        data: [],
+        pointRadius: 5,
+        pointBackgroundColor: EMBED_COLORS[label],
+        pointBorderColor: "rgba(255, 255, 255, 0.4)",
+        pointBorderWidth: 1,
+    });
+    return new Chart(canvas, {
+        type: "scatter",
+        data: {
+            datasets: [
+                libPoint("healthy"),
+                libPoint("fault"),
+                {
+                    label: "live windows",
+                    data: [],
+                    showLine: true,
+                    borderColor: EMBED_COLORS.trail,
+                    borderWidth: 1,
+                    pointRadius: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 8 : 3),
+                    pointBorderWidth: (c) => (c.dataIndex === c.dataset.data.length - 1 ? 2 : 0),
+                    pointBorderColor: EMBED_COLORS.ring,
+                    pointBackgroundColor: (c) => EMBED_COLORS[c.raw?.label] || EMBED_COLORS.trail,
+                },
+            ],
+        },
+        options: {
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (c) => c.raw.window
+                            ? `${c.raw.window} · ${c.raw.label}`
+                            : `library · ${c.raw.label}`,
+                    },
+                },
+            },
+            scales: {
+                x: { ticks: { display: false }, grid: { color: "rgba(255,255,255,0.04)" }, border: { display: false } },
+                y: { ticks: { display: false }, grid: { color: "rgba(255,255,255,0.04)" }, border: { display: false } },
+            },
+        },
+    });
+}
+
+document.querySelectorAll(".embed-plot canvas").forEach((c) => {
+    embedCharts[c.dataset.wt] = makeEmbedChart(c);
+});
+
+function pushEmbedPoint(ev) {
+    const chart = embedCharts[ev.turbine];
+    if (!chart || !ev.coords) return;
+    const [x, y] = ev.coords;
+    chart.data.datasets[2].data.push({ x, y, label: ev.class, window: ev.window_start?.slice(5, 16) });
+    chart.update("none");
+}
+
+function resetEmbedTrails() {
+    for (const chart of Object.values(embedCharts)) {
+        chart.data.datasets[2].data = [];
+        chart.update("none");
+    }
+}
+
+async function loadEmbedLibrary() {
+    try {
+        const res = await fetch("/api/projections");
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+        for (const chart of Object.values(embedCharts)) {
+            for (const [i, label] of ["healthy", "fault"].entries()) {
+                chart.data.datasets[i].data = data.library.filter((p) => p.label === label);
+            }
+            chart.update("none");
+        }
+    } catch (err) {
+        console.warn("projections failed", err);
+    }
+}
+
+document.getElementById("embed-toggle").addEventListener("click", (e) => {
+    const btn = e.currentTarget;
+    const open = btn.getAttribute("aria-expanded") !== "true";
+    btn.setAttribute("aria-expanded", String(open));
+    document.getElementById("embed-body").hidden = !open;
+});
+
+loadEmbedLibrary();
+
+// ---------- "How it works" dialog ----------
+const about = document.getElementById("about");
+document.getElementById("about-open").addEventListener("click", () => about.showModal());
+document.getElementById("about-close").addEventListener("click", () => about.close());
+about.addEventListener("click", (e) => { if (e.target === about) about.close(); });  // backdrop click
 
 // ---------- start / stop ----------
 document.getElementById("play-toggle").addEventListener("click", () => {

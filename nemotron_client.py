@@ -7,7 +7,7 @@ to check. The model only sees SCADA statistics and the KNN vote — never the
 status logs, so the cause it names is inferred, not looked up.
 
   model="nemotron"  NVIDIA Nemotron on NVIDIA's hosted API (OpenAI-compatible)
-  model="newton"    Newton C 2.6 on Archetype's /query (system prompt in instruction_prompt)
+  model="newton"    Newton C 2.6 on Archetype's /api/lens/query (system prompt in instruction_prompt)
 
 Both get the same prompt and the same validation.
 """
@@ -25,7 +25,7 @@ import pandas as pd
 from data_loader import discover_turbines, load_turbine_window
 
 DEFAULT_ENDPOINT = "https://integrate.api.nvidia.com/v1"
-DEFAULT_MODEL = "nvidia/nemotron-3-super-120b-a12b"
+DEFAULT_MODEL = "nvidia/nemotron-3-ultra-550b-a55b"
 NEWTON_MODEL = "Newton::c2_6_8b_fp8_260424d7a55d5e"
 MODELS = ("nemotron", "newton")
 TIMEOUT = 60
@@ -137,7 +137,7 @@ def _newton_chat(system: str, user: str, max_new_tokens: int = 600) -> str:
 
     client = _get_client()
     payload = client.requests_post(
-        f"{client.api_endpoint}/query",
+        f"{client.api_endpoint}/lens/query",
         data_payload=json.dumps({
             "query": user,
             "instruction_prompt": system,  # C 2.6 ignores the legacy system_prompt field

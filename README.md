@@ -1,6 +1,6 @@
 # Penmanshiel · live turbine anomaly monitor · Omega × NVIDIA Nemotron
 
-Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archetypeai-wind-turbine-demo) that adds **NVIDIA Nemotron fault briefs** (with a toggle to compare against Newton C 2.6). Newton Omega + local KNN still decide healthy / fault; when a turbine is committed to `fault`, Nemotron (NVIDIA hosted API, default `nvidia/nemotron-3-super-120b-a12b`) gets the flagged window's SCADA statistics next to the healthy peer's over the same hours and returns a short brief — what changed, the likely cause, what to check — shown under the fault entry in the anomaly feed. See [NVIDIA Nemotron fault briefs](#nvidia-nemotron-fault-briefs).
+Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archetypeai-wind-turbine-demo) that adds **NVIDIA Nemotron fault briefs** (with a toggle to compare against Newton C 2.6). Newton Omega + local KNN still decide healthy / fault; when a turbine is committed to `fault`, Nemotron (NVIDIA hosted API, default `nvidia/nemotron-3-ultra-550b-a55b`) gets the flagged window's SCADA statistics next to the healthy peer's over the same hours and returns a short brief — what changed, the likely cause, what to check — shown under the fault entry in the anomaly feed. See [NVIDIA Nemotron fault briefs](#nvidia-nemotron-fault-briefs).
 
 ![Anomaly feed with an NVIDIA Nemotron brief under WT09's Oct 17 fault: 78 kW vs WT01's 516 kW, pitch 57° (feathered), stopped 13.2 h in wind — suggests a pitch-system fault or safety trip, with three checks](images/wind-turbine-nemotron-brief.png)
 
@@ -12,7 +12,7 @@ The dataset features a documented frequency-converter outage on **WT01** in earl
 
 ## What the app does
 
-- **Replays** 2,184 hourly SCADA ticks (2019-09-01 → 2019-12-01) for WT01 + WT09 over an SSE stream, driven by a **Start / Stop** control.
+- **Replays** 888 hourly SCADA ticks (2019-10-25 → 2019-12-01) for WT01 + WT09 over an SSE stream, driven by a **Start / Stop** control.
 - **Classifies each 128-sample (~21 h) window via Direct Query** — the four signal channels are embedded by the Omega encoder (one `/query` per channel, fanned out in parallel) and scored by a local KNN against the n-shot library (see [Architecture](#architecture-direct-query--local-knn)).
 - **Runs the classifier in a background thread** and drains `newton_prediction` verdicts onto the SSE stream (~50 windows per turbine), paced to the replay timeline so a verdict surfaces as the playhead reaches its window.
 - **Emits debounced anomaly events** on strong-majority verdict transitions (`fault` ↔ `healthy`) — see [Anomaly logic](#anomaly-logic) for the why.
@@ -93,7 +93,7 @@ cd archetypeai-wind-turbine-demo-nemotron
 # Credentials
 cp .env.example .env
 # Edit .env with your ATAI_API_KEY, ATAI_API_ENDPOINT and NVIDIA_API_KEY (nvapi-…, build.nvidia.com)
-# Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-super-120b-a12b)
+# Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-ultra-550b-a55b)
 
 # Virtual env — use whichever python3 you have (verified on 3.12 and 3.14).
 # No `activate` step: every command below calls .venv/bin/ explicitly.
@@ -121,7 +121,7 @@ near-instant, so classification begins right away.
 
 ## Using the UI
 
-- **Top bar**: Archetype AI wordmark · title · live `Building reference library…` / `Newton analysing` / `Newton complete` status pill · connection-state dot (`idle` → `streaming` → `ready`) · **Start / Stop** button.
+- **Top bar**: Archetype AI wordmark · title · live `Building reference library…` / `Newton analysing` / `Newton complete` status pill · connection-state dot (`idle` → `streaming` → `ready`) · **How it works** button (opens a diagram of the offline library, per-window classification and fault-brief flows) · **Start / Stop** button.
 - **Timeline strip**: simulated date range with a cursor that advances per tick; `t-now` mono readout on the right.
 - **Per-turbine panel** (left and right of the feed):
   - `ANALYSING` / `HEALTHY` / `FAULT` state badge (driven by Newton's *debounced* state).
@@ -132,6 +132,7 @@ near-instant, so classification begins right away.
 - **Anomaly feed** (centre column): strong-majority state transitions ("Detected: fault classification", "Recovered: now healthy") with the window range and timestamp. Single 3-2 KNN flickers are intentionally suppressed.
   - Each fault entry gets a **fault brief** — "Analysing window vs. healthy peer…" while it runs, then the observation, likely cause and 2–3 checks.
   - Each fault is briefed by **both** models in parallel. The **Nemotron / Newton C** toggle in the feed header picks which brief every fault row shows (NVIDIA Nemotron by default) — switching never refetches.
+- **Omega embeddings panel** (under the grid, collapsed by default): a 2D projection of the embedding space per turbine — see [Embedding panel](#embedding-panel).
 
 <a id="architecture-direct-query--local-knn"></a>
 ## Architecture: Direct Query + local KNN
@@ -196,13 +197,25 @@ Validated on held-out windows (none in the library): WT01's November fault is de
 
 The "healthy" peer isn't fault-free either: the replay also flags **WT09 on 2019-10-17 → 10-19**. That's a real event, not a false positive — WT09's status log records a ~23 h stop starting 2019-10-17 13:29 (*Charging circuit pitch*, with battery charge-cycle errors on all three pitch axes). The Nemotron brief for that window, written from SCADA alone, points to a pitch-system fault.
 
+## Embedding panel
+
+Click **Omega embeddings · 2D projection** under the grid to expand it. One scatter per turbine, both in the same coordinates:
+
+![Embedding panel: WT01's live trail jumps to the fault reference cluster during the November fault and returns; WT09 stays in the healthy region](images/wind-turbine-embedding-panel.png)
+
+- **Bright ringed dots** — the n-shot library KNN votes against (green = healthy, red = fault).
+- **Trail** — the turbine's live windows in replay order, each dot coloured by its KNN verdict, the latest one ringed. Hover a dot for its window.
+
+`projections.py` fits PCA-2 once on the library vectors (numpy SVD, ~30 ms); every `newton_prediction` carries the live window's `coords` through the same axes. PCA only, unlike the SWaT demo's PCA / UMAP toggle: with 26 library points UMAP's layout says little, and t-SNE can't place new points without refitting.
+
 ## API surface
 
 | Endpoint | What it returns |
 |---|---|
 | `GET /` | The dashboard UI |
 | `GET /api/scada/<wt_id>` | Downsampled 3-month SCADA series for a single turbine (JSON, debug aid) |
-| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction`, `anomaly` (with `votes`), `complete` |
+| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction` (with PCA `coords`), `anomaly` (with `votes`), `complete` |
+| `GET /api/projections` | PCA-2 library coords for the embedding panel: `{library: [{x, y, label}], explained, loo_accuracy, k}` |
 | `POST /api/brief` | Fault brief for one window: `{turbine, window_start, window_end, votes, model: "nemotron" \| "newton"}` → `{observation, likely_cause, checks, model, latency_ms, cached}` |
 
 `tps` (ticks/sec) clamps to `[1, 200]`; the replay duration scales linearly with it. The UI requests a fixed `tps=15` (the Start button) for a steady ~2.5-minute replay, but the endpoint accepts any value. The background classifier runs ahead of the playhead; `app.py` buffers its predictions and releases each one as the visible timeline reaches its `tick_index`, so predictions stay aligned with playback at any speed.
@@ -210,7 +223,7 @@ The "healthy" peer isn't fault-free either: the replay also flags **WT09 on 2019
 ## Project layout
 
 ```
-app.py                         # Flask + SSE; tick loop; prediction release + anomaly synth; /api/brief
+app.py                         # Flask + SSE; tick loop; prediction release + anomaly synth; /api/brief, /api/projections
 nemotron_client.py             # Window stats vs. peer → fault brief from NVIDIA Nemotron or Newton C 2.6 (JSON)
 build_library.py               # Offline: embed reference windows → library.json (run once)
 library.json                   # Precomputed n-shot library (scaler + vectors + fingerprint)
@@ -221,12 +234,14 @@ newton_client.py               # Direct Query + local KNN:
                                #   _build_library (disk → live fallback),
                                #   BackgroundClassifier (worker thread),
                                #   replay_events (pure SCADA tick streamer)
+projections.py                 # PCA-2 of the library + leave-one-out KNN accuracy (embedding panel)
 data_loader.py                 # CSV reader, window slicing, hourly downsampling
 templates/index.html           # Topbar + timeline + 3-column grid
 templates/_turbine_card.html   # Reusable panel: state badge, SVG, stats, spark
+templates/_how_it_works.html   # "How it works" dialog: inline SVG pipeline diagram
 templates/_wordmark.svg        # Archetype AI wordmark (inlined for currentColor)
 static/style.css               # OKLCH tokens, Geist fonts, sharp radii, FlatLogItem feed
-static/app.js                  # SSE consumer, panel updates, rotor RAF loop, Chart.js spark
+static/app.js                  # SSE consumer, panel updates, rotor RAF loop, Chart.js spark + embedding scatters
 requirements.txt
 .env.example
 LICENSE                        # Apache-2.0
@@ -242,7 +257,7 @@ LICENSE                        # Apache-2.0
 
 - **SCADA data**: Cubico Sustainable Investments, Penmanshiel wind farm. Zenodo records [16807304](https://zenodo.org/records/16807304) (newer) and [5946808](https://zenodo.org/records/5946808) (original); HLRS WindLab [mirror](https://windlab.hlrs.de/dataset/zenodo-16807304/resource/b16ea689-f8ca-4873-bf19-81110daf191c). CC-BY-4.0.
 - **Inference**: Archetype AI Newton Direct Query API (`OmegaEncoder::omega_embeddings_1_4`) with local KNN classification — no lens, no session.
-- **Fault briefs**: NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via the NVIDIA hosted API, or Newton C 2.6 (`Newton::c2_6_8b_fp8_260424d7a55d5e`) on `/query`.
+- **Fault briefs**: NVIDIA Nemotron (`nvidia/nemotron-3-ultra-550b-a55b`) via the NVIDIA hosted API, or Newton C 2.6 (`Newton::c2_6_8b_fp8_260424d7a55d5e`) on `/api/lens/query`.
 - **Visual design**: [Archetype AI design system](https://github.com/archetypeai/agent-skills/blob/main/DESIGN.md) — Geist + Geist Mono, OKLCH palette, sharp 2 px radii.
 
 ## License

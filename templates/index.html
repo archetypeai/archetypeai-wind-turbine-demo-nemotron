@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Penmanshiel · Omega × NVIDIA Nemotron</title>
+    <title>Penmanshiel · Newton × NVIDIA Nemotron</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
             <span class="sep"></span>
             <div>
                 <h1>Penmanshiel · live turbine monitor</h1>
-                <p class="muted">Streaming SCADA replay · classification by Newton Omega + local KNN · fault briefs by NVIDIA Nemotron or Newton C 2.6</p>
+                <p class="muted">Streaming turbine sensor data · classification by Newton + local KNN · fault briefs by NVIDIA Nemotron or Newton</p>
             </div>
         </div>
         <div class="ctrl">
@@ -26,6 +26,7 @@
                 <span class="newton-text">Newton idle</span>
             </div>
             <span class="muted small" id="status-dot">● idle</span>
+            <button type="button" id="about-open" class="ghost-btn">How it works</button>
             <button id="play-toggle" class="play-toggle" aria-label="Start replay">Start</button>
         </div>
     </header>
@@ -47,17 +48,9 @@
                 <h2>Anomaly feed <span class="muted small">live</span></h2>
                 <div class="model-toggle" id="brief-model" role="group" aria-label="Fault brief model">
                     <button type="button" data-model="nemotron" aria-pressed="true">Nemotron</button>
-                    <button type="button" data-model="newton" aria-pressed="false">Newton C</button>
+                    <button type="button" data-model="newton" aria-pressed="false">Newton</button>
                 </div>
             </div>
-            <p class="feed-desc">
-                Newton state transitions. The per-panel verdict updates on every window;
-                an entry appears here only when Newton's KNN votes by a strong margin
-                (winner has ≥3 more votes than the runner-up), filtering out close 3-2
-                ties as inconclusive. Fault entries carry a brief comparing the window with the
-                healthy peer, from NVIDIA Nemotron or Newton C 2.6 (toggle above) — a suggestion
-                for the operator, not a diagnosis.
-            </p>
             <ol id="anomaly-list"></ol>
             <div class="legend">
                 <span class="dot healthy"></span> healthy
@@ -70,6 +63,21 @@
             {% with card_id='b' %}{% include '_turbine_card.html' %}{% endwith %}
         </article>
     </main>
+
+    <section class="embed" aria-label="Omega embedding visualization">
+        <button type="button" class="embed-toggle" id="embed-toggle" aria-expanded="false" aria-controls="embed-body">
+            <span>Omega embeddings · 2D projection</span>
+            <span class="chev" aria-hidden="true">▸</span>
+        </button>
+        <div class="embed-body" id="embed-body" hidden>
+            <div class="embed-grid">
+                <figure class="embed-plot"><figcaption>WT{{ wt_a }}</figcaption><div class="embed-canvas"><canvas data-wt="{{ wt_a }}"></canvas></div></figure>
+                <figure class="embed-plot"><figcaption>WT{{ wt_b }}</figcaption><div class="embed-canvas"><canvas data-wt="{{ wt_b }}"></canvas></div></figure>
+            </div>
+        </div>
+    </section>
+
+    {% include '_how_it_works.html' %}
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
