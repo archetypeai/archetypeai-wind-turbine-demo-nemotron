@@ -1,6 +1,6 @@
 # Penmanshiel · live turbine anomaly monitor · Omega × NVIDIA Nemotron
 
-Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archetypeai-wind-turbine-demo) that adds **NVIDIA Nemotron fault briefs** (with a toggle to compare against Newton C 2.6). Newton Omega + local KNN still decide healthy / fault; when a turbine is committed to `fault`, Nemotron (NVIDIA hosted API, default `nvidia/nemotron-3-super-120b-a12b`) gets the flagged window's SCADA statistics next to the healthy peer's over the same hours and returns a short brief — what changed, the likely cause, what to check — shown under the fault entry in the anomaly feed. See [NVIDIA Nemotron fault briefs](#nvidia-nemotron-fault-briefs).
+Fork of [`archetypeai-wind-turbine-demo`](https://github.com/archetypeai/archetypeai-wind-turbine-demo) that adds **NVIDIA Nemotron fault briefs** (with a toggle to compare against Newton C 2.6). Newton Omega + local KNN still decide healthy / fault; when a turbine is committed to `fault`, Nemotron (NVIDIA hosted API, default `nvidia/nemotron-3-ultra-550b-a55b`) gets the flagged window's SCADA statistics next to the healthy peer's over the same hours and returns a short brief — what changed, the likely cause, what to check — shown under the fault entry in the anomaly feed. See [NVIDIA Nemotron fault briefs](#nvidia-nemotron-fault-briefs).
 
 ![Anomaly feed with an NVIDIA Nemotron brief under WT09's Oct 17 fault: 78 kW vs WT01's 516 kW, pitch 57° (feathered), stopped 13.2 h in wind — suggests a pitch-system fault or safety trip, with three checks](images/wind-turbine-nemotron-brief.png)
 
@@ -93,7 +93,7 @@ cd archetypeai-wind-turbine-demo-nemotron
 # Credentials
 cp .env.example .env
 # Edit .env with your ATAI_API_KEY, ATAI_API_ENDPOINT and NVIDIA_API_KEY (nvapi-…, build.nvidia.com)
-# Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-super-120b-a12b)
+# Optional: NEMOTRON_MODEL (default nvidia/nemotron-3-ultra-550b-a55b)
 
 # Virtual env — use whichever python3 you have (verified on 3.12 and 3.14).
 # No `activate` step: every command below calls .venv/bin/ explicitly.
@@ -242,7 +242,7 @@ LICENSE                        # Apache-2.0
 
 - **SCADA data**: Cubico Sustainable Investments, Penmanshiel wind farm. Zenodo records [16807304](https://zenodo.org/records/16807304) (newer) and [5946808](https://zenodo.org/records/5946808) (original); HLRS WindLab [mirror](https://windlab.hlrs.de/dataset/zenodo-16807304/resource/b16ea689-f8ca-4873-bf19-81110daf191c). CC-BY-4.0.
 - **Inference**: Archetype AI Newton Direct Query API (`OmegaEncoder::omega_embeddings_1_4`) with local KNN classification — no lens, no session.
-- **Fault briefs**: NVIDIA Nemotron (`nvidia/nemotron-3-super-120b-a12b`) via the NVIDIA hosted API, or Newton C 2.6 (`Newton::c2_6_8b_fp8_260424d7a55d5e`) on `/query`.
+- **Fault briefs**: NVIDIA Nemotron (`nvidia/nemotron-3-ultra-550b-a55b`) via the NVIDIA hosted API, or Newton C 2.6 (`Newton::c2_6_8b_fp8_260424d7a55d5e`) on `/api/lens/query`.
 - **Visual design**: [Archetype AI design system](https://github.com/archetypeai/agent-skills/blob/main/DESIGN.md) — Geist + Geist Mono, OKLCH palette, sharp 2 px radii.
 
 ## License
