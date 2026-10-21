@@ -463,12 +463,6 @@ body {
 .model-toggle button:hover { color: var(--fg); }
 .model-toggle button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
 .model-toggle button:focus-visible { outline: 2px solid var(--info); outline-offset: -2px; }
-.feed-desc {
-    margin: 0;
-    font-size: 11px;
-    color: var(--fg-muted);
-    line-height: 1.45;
-}
 .feed ol {
     list-style: none;
     padding: 0;

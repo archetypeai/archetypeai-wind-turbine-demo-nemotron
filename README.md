@@ -12,7 +12,7 @@ The dataset features a documented frequency-converter outage on **WT01** in earl
 
 ## What the app does
 
-- **Replays** 2,184 hourly SCADA ticks (2019-09-01 → 2019-12-01) for WT01 + WT09 over an SSE stream, driven by a **Start / Stop** control.
+- **Replays** 888 hourly SCADA ticks (2019-10-25 → 2019-12-01) for WT01 + WT09 over an SSE stream, driven by a **Start / Stop** control.
 - **Classifies each 128-sample (~21 h) window via Direct Query** — the four signal channels are embedded by the Omega encoder (one `/query` per channel, fanned out in parallel) and scored by a local KNN against the n-shot library (see [Architecture](#architecture-direct-query--local-knn)).
 - **Runs the classifier in a background thread** and drains `newton_prediction` verdicts onto the SSE stream (~50 windows per turbine), paced to the replay timeline so a verdict surfaces as the playhead reaches its window.
 - **Emits debounced anomaly events** on strong-majority verdict transitions (`fault` ↔ `healthy`) — see [Anomaly logic](#anomaly-logic) for the why.

@@ -308,7 +308,7 @@ function appendFeedItem(wt, classes, msg, ctx, ts) {
 // ---------- fault briefs: NVIDIA Nemotron (default) or Newton C 2.6 ----------
 
 const BRIEF_MODELS = ["nemotron", "newton"];
-const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton C 2.6" };
+const BRIEF_MODEL_NAME = { nemotron: "NVIDIA Nemotron", newton: "Newton" };
 let briefModel = "nemotron";
 
 function setBriefModel(model) {

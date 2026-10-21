@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="utf-8" />
-    <title>Penmanshiel · Omega × NVIDIA Nemotron</title>
+    <title>Penmanshiel · Newton × NVIDIA Nemotron</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Geist:wght@100..900&family=Geist+Mono:wght@100..900&display=swap" rel="stylesheet">
@@ -17,7 +17,7 @@
             <span class="sep"></span>
             <div>
                 <h1>Penmanshiel · live turbine monitor</h1>
-                <p class="muted">Streaming SCADA replay · classification by Newton Omega + local KNN · fault briefs by NVIDIA Nemotron or Newton C 2.6</p>
+                <p class="muted">Streaming SCADA replay · classification by Newton + local KNN · fault briefs by NVIDIA Nemotron or Newton</p>
             </div>
         </div>
         <div class="ctrl">
@@ -47,17 +47,9 @@
                 <h2>Anomaly feed <span class="muted small">live</span></h2>
                 <div class="model-toggle" id="brief-model" role="group" aria-label="Fault brief model">
                     <button type="button" data-model="nemotron" aria-pressed="true">Nemotron</button>
-                    <button type="button" data-model="newton" aria-pressed="false">Newton C</button>
+                    <button type="button" data-model="newton" aria-pressed="false">Newton</button>
                 </div>
             </div>
-            <p class="feed-desc">
-                Newton state transitions. The per-panel verdict updates on every window;
-                an entry appears here only when Newton's KNN votes by a strong margin
-                (winner has ≥3 more votes than the runner-up), filtering out close 3-2
-                ties as inconclusive. Fault entries carry a brief comparing the window with the
-                healthy peer, from NVIDIA Nemotron or Newton C 2.6 (toggle above) — a suggestion
-                for the operator, not a diagnosis.
-            </p>
             <ol id="anomaly-list"></ol>
             <div class="legend">
                 <span class="dot healthy"></span> healthy

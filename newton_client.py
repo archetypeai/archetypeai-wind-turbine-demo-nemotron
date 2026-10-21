@@ -64,8 +64,8 @@ REFERENCE_WINDOWS: dict[str, list[dict]] = {
 # Hardcoded scenario for the demo.
 DEMO_WT_A = "01"  # frequency converter fault on 2019-11-02
 DEMO_WT_B = "09"  # healthy peer over the same period
-DEMO_START = "2019-09-01 00:00:00"
-DEMO_END = "2019-12-01 00:00:00"  # 3 months
+DEMO_START = "2019-10-25 00:00:00"
+DEMO_END = "2019-12-01 00:00:00"
 
 # Four signal columns we embed.
 FEATURE_COLUMNS: list[tuple[str, str]] = [
