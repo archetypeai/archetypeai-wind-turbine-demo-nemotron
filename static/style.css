@@ -272,9 +272,10 @@ body {
     display: grid;
     grid-template-columns: 1fr 0.7fr 1fr;
     gap: 12px;
-    padding: 16px 20px 24px;
-    height: calc(100vh - 96px);
-    min-height: 600px;
+    padding: 16px 20px 12px;
+    /* Topbar + timeline (107px) above, collapsed embeddings bar (40px + 16px margin) below. */
+    height: calc(100vh - 163px);
+    min-height: 540px;
 }
 @media (max-width: 1200px) {
     .grid { grid-template-columns: 1fr; height: auto; }
@@ -396,7 +397,7 @@ body {
     width: 100%;
     flex: 0 0 auto;
     aspect-ratio: 180 / 260;
-    max-height: 280px;
+    max-height: min(280px, calc(100vh - 520px));  /* shrinks on short screens so the sparkline keeps its room */
     margin: 0 auto;
     display: block;
 }
@@ -646,7 +647,7 @@ body {
 
 /* ---------- Omega embedding panel (collapsible, under the grid) ---------- */
 .embed {
-    margin: 0 20px 24px;
+    margin: 0 20px 16px;
     background: var(--card);
     border: 1px solid var(--border);
     border-radius: var(--radius);
