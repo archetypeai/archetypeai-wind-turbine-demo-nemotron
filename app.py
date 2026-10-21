@@ -9,6 +9,7 @@ the browser reads, paced onto the replay timeline.
 Endpoints:
     GET /                       UI
     GET /api/scada/<wt_id>      Downsampled rows for initial chart
+    GET /api/projections        PCA-2 of the KNN library + leave-one-out accuracy (embedding panel)
     GET /api/replay?tps=N       SSE: meta, tick, newton_status, newton_prediction, anomaly, complete
     POST /api/brief             Fault brief for one window: {turbine, window_start, window_end,
                                 votes, model: "nemotron" | "newton"}
@@ -94,6 +95,18 @@ def _anomaly_from(pred: dict, committed: dict[str, str | None]) -> dict | None:
         "window_start": pred.get("window_start"), "window_end": pred.get("window_end"),
         "votes": votes,
     }
+
+
+@app.route("/api/projections")
+def projections():
+    """Library coords for the embedding panel. Live coords ride on newton_prediction events."""
+    try:
+        proj = nc.library_projection()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("projection failed: %s", exc)
+        return jsonify({"error": str(exc)}), 500
+    return jsonify({"library": proj.library, "explained": proj.explained,
+                    "loo_accuracy": proj.loo_accuracy, "k": nc.KNN_K})
 
 
 @app.route("/api/brief", methods=["POST"])

@@ -36,6 +36,7 @@ from typing import Generator
 import pandas as pd
 from archetypeai.api_client import ArchetypeAI
 
+import projections
 from data_loader import discover_turbines, load_turbine_window
 
 logger = logging.getLogger(__name__)
@@ -441,6 +442,19 @@ def _build_library() -> list[tuple[list[float], str]]:
         return library
 
 
+_projection_lock = threading.Lock()
+_projection_cache: projections.Projection | None = None
+
+
+def library_projection() -> projections.Projection:
+    """PCA-2 of the KNN library (fit once) — live windows are projected through it."""
+    global _projection_cache
+    with _projection_lock:
+        if _projection_cache is None:
+            _projection_cache = projections.fit(_build_library(), KNN_K)
+        return _projection_cache
+
+
 class BackgroundClassifier:
     """Classify the demo turbines' windows via Direct Query + KNN in a thread.
 
@@ -482,6 +496,7 @@ class BackgroundClassifier:
             self._q.put({"kind": "newton_status", "turbine": wt, "stage": "starting"})
         try:
             library = _build_library()
+            projection = library_projection()
         except Exception as exc:  # noqa: BLE001
             logger.exception("Library build failed")
             for wt in self.turbines:
@@ -532,6 +547,7 @@ class BackgroundClassifier:
                     "window_end": pd.to_datetime(win_end, unit="s").strftime("%Y-%m-%d %H:%M"),
                     "class": label,
                     "votes": votes,
+                    "coords": projection.project(vec),
                     "model": OMEGA_MODEL,
                 })
         # Final done for any turbine whose last window == max_windows-1.

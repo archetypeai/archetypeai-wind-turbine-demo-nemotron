@@ -132,6 +132,7 @@ near-instant, so classification begins right away.
 - **Anomaly feed** (centre column): strong-majority state transitions ("Detected: fault classification", "Recovered: now healthy") with the window range and timestamp. Single 3-2 KNN flickers are intentionally suppressed.
   - Each fault entry gets a **fault brief** — "Analysing window vs. healthy peer…" while it runs, then the observation, likely cause and 2–3 checks.
   - Each fault is briefed by **both** models in parallel. The **Nemotron / Newton C** toggle in the feed header picks which brief every fault row shows (NVIDIA Nemotron by default) — switching never refetches.
+- **Omega embeddings panel** (under the grid, collapsed by default): a 2D projection of the embedding space per turbine — see [Embedding panel](#embedding-panel).
 
 <a id="architecture-direct-query--local-knn"></a>
 ## Architecture: Direct Query + local KNN
@@ -196,13 +197,25 @@ Validated on held-out windows (none in the library): WT01's November fault is de
 
 The "healthy" peer isn't fault-free either: the replay also flags **WT09 on 2019-10-17 → 10-19**. That's a real event, not a false positive — WT09's status log records a ~23 h stop starting 2019-10-17 13:29 (*Charging circuit pitch*, with battery charge-cycle errors on all three pitch axes). The Nemotron brief for that window, written from SCADA alone, points to a pitch-system fault.
 
+## Embedding panel
+
+Click **Omega embeddings · 2D projection** under the grid to expand it. One scatter per turbine, both in the same coordinates:
+
+![Embedding panel: WT01's live trail jumps to the fault reference cluster during the November fault and returns; WT09 stays in the healthy region](images/wind-turbine-embedding-panel.png)
+
+- **Bright ringed dots** — the n-shot library KNN votes against (green = healthy, red = fault).
+- **Trail** — the turbine's live windows in replay order, each dot coloured by its KNN verdict, the latest one ringed. Hover a dot for its window.
+
+`projections.py` fits PCA-2 once on the library vectors (numpy SVD, ~30 ms); every `newton_prediction` carries the live window's `coords` through the same axes. PCA only, unlike the SWaT demo's PCA / UMAP toggle: with 26 library points UMAP's layout says little, and t-SNE can't place new points without refitting.
+
 ## API surface
 
 | Endpoint | What it returns |
 |---|---|
 | `GET /` | The dashboard UI |
 | `GET /api/scada/<wt_id>` | Downsampled 3-month SCADA series for a single turbine (JSON, debug aid) |
-| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction`, `anomaly` (with `votes`), `complete` |
+| `GET /api/replay?tps=N` | SSE stream: `meta`, `newton_status`, `tick`, `newton_prediction` (with PCA `coords`), `anomaly` (with `votes`), `complete` |
+| `GET /api/projections` | PCA-2 library coords for the embedding panel: `{library: [{x, y, label}], explained, loo_accuracy, k}` |
 | `POST /api/brief` | Fault brief for one window: `{turbine, window_start, window_end, votes, model: "nemotron" \| "newton"}` → `{observation, likely_cause, checks, model, latency_ms, cached}` |
 
 `tps` (ticks/sec) clamps to `[1, 200]`; the replay duration scales linearly with it. The UI requests a fixed `tps=15` (the Start button) for a steady ~2.5-minute replay, but the endpoint accepts any value. The background classifier runs ahead of the playhead; `app.py` buffers its predictions and releases each one as the visible timeline reaches its `tick_index`, so predictions stay aligned with playback at any speed.
@@ -210,7 +223,7 @@ The "healthy" peer isn't fault-free either: the replay also flags **WT09 on 2019
 ## Project layout
 
 ```
-app.py                         # Flask + SSE; tick loop; prediction release + anomaly synth; /api/brief
+app.py                         # Flask + SSE; tick loop; prediction release + anomaly synth; /api/brief, /api/projections
 nemotron_client.py             # Window stats vs. peer → fault brief from NVIDIA Nemotron or Newton C 2.6 (JSON)
 build_library.py               # Offline: embed reference windows → library.json (run once)
 library.json                   # Precomputed n-shot library (scaler + vectors + fingerprint)
@@ -221,12 +234,13 @@ newton_client.py               # Direct Query + local KNN:
                                #   _build_library (disk → live fallback),
                                #   BackgroundClassifier (worker thread),
                                #   replay_events (pure SCADA tick streamer)
+projections.py                 # PCA-2 of the library + leave-one-out KNN accuracy (embedding panel)
 data_loader.py                 # CSV reader, window slicing, hourly downsampling
 templates/index.html           # Topbar + timeline + 3-column grid
 templates/_turbine_card.html   # Reusable panel: state badge, SVG, stats, spark
 templates/_wordmark.svg        # Archetype AI wordmark (inlined for currentColor)
 static/style.css               # OKLCH tokens, Geist fonts, sharp radii, FlatLogItem feed
-static/app.js                  # SSE consumer, panel updates, rotor RAF loop, Chart.js spark
+static/app.js                  # SSE consumer, panel updates, rotor RAF loop, Chart.js spark + embedding scatters
 requirements.txt
 .env.example
 LICENSE                        # Apache-2.0

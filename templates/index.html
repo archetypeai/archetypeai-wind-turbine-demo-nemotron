@@ -63,6 +63,19 @@
         </article>
     </main>
 
+    <section class="embed" aria-label="Omega embedding visualization">
+        <button type="button" class="embed-toggle" id="embed-toggle" aria-expanded="false" aria-controls="embed-body">
+            <span>Omega embeddings · 2D projection</span>
+            <span class="chev" aria-hidden="true">▸</span>
+        </button>
+        <div class="embed-body" id="embed-body" hidden>
+            <div class="embed-grid">
+                <figure class="embed-plot"><figcaption>WT{{ wt_a }}</figcaption><div class="embed-canvas"><canvas data-wt="{{ wt_a }}"></canvas></div></figure>
+                <figure class="embed-plot"><figcaption>WT{{ wt_b }}</figcaption><div class="embed-canvas"><canvas data-wt="{{ wt_b }}"></canvas></div></figure>
+            </div>
+        </div>
+    </section>
+
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
