@@ -529,6 +529,11 @@ document.getElementById("embed-toggle").addEventListener("click", (e) => {
 
 loadEmbedLibrary();
 
+// ---------- "How it works" dialog ----------
+const about = document.getElementById("about");
+document.getElementById("about-open").addEventListener("click", () => about.showModal());
+document.getElementById("about-close").addEventListener("click", () => about.close());
+about.addEventListener("click", (e) => { if (e.target === about) about.close(); });  // backdrop click
 
 // ---------- start / stop ----------
 document.getElementById("play-toggle").addEventListener("click", () => {

@@ -157,6 +157,81 @@ body {
     color: var(--fg);
 }
 
+.ghost-btn {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--fg-muted);
+    padding: 6px 12px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+}
+.ghost-btn:hover { color: var(--fg); border-color: var(--input); }
+.ghost-btn:focus-visible { outline: 2px solid var(--info); outline-offset: 2px; }
+
+/* ---------- "How it works" dialog ---------- */
+.about {
+    width: min(1080px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px);
+    padding: 16px 20px 20px;
+    background: var(--card);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+}
+.about::backdrop { background: oklch(0 0 0 / 0.6); }
+.about-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.about-head h2 {
+    margin: 0;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.about-close {
+    background: none;
+    border: 0;
+    color: var(--fg-muted);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 4px 6px;
+}
+.about-close:hover { color: var(--fg); }
+.about .diagram-scroll { overflow-x: auto; }
+.about .diagram { display: block; width: 100%; min-width: 820px; height: auto; }
+
+.diagram .dg-box rect { fill: var(--muted); stroke: var(--input); stroke-width: 1; }
+.diagram .dg-box.omega rect    { stroke: var(--info); fill: var(--info-bg); }
+.diagram .dg-box.nemotron rect { stroke: var(--good); fill: var(--good-bg); }
+.diagram .dg-box.newton rect   { stroke: var(--chart-1); fill: oklch(0.66 0.177 299.333 / 0.1); }
+.diagram .dg-box.fault rect    { stroke: var(--critical-border); fill: var(--critical-bg); }
+.diagram text { text-anchor: middle; }
+.diagram .dg-title { fill: var(--fg); font-family: var(--font-sans); font-size: 13px; }
+.diagram .dg-sub   { fill: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; }
+.diagram .dg-lane {
+    text-anchor: start;
+    fill: var(--fg-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+.diagram .dg-note { fill: var(--fg-muted); font-family: var(--font-mono); font-size: 9.5px; }
+.diagram .dg-foot { fill: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; }
+.diagram .dg-lanes line { stroke: var(--border); }
+.diagram .dg-arrows path { fill: none; stroke: var(--fg-muted); stroke-width: 1.2; marker-end: url(#dg-arrow); }
+.diagram #dg-arrow path { fill: var(--fg-muted); }
+
 /* ---------- timeline ---------- */
 .timeline {
     display: grid;

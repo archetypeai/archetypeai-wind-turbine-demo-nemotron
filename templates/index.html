@@ -17,7 +17,7 @@
             <span class="sep"></span>
             <div>
                 <h1>Penmanshiel · live turbine monitor</h1>
-                <p class="muted">Streaming SCADA replay · classification by Newton + local KNN · fault briefs by NVIDIA Nemotron or Newton</p>
+                <p class="muted">Streaming turbine sensor data · classification by Newton + local KNN · fault briefs by NVIDIA Nemotron or Newton</p>
             </div>
         </div>
         <div class="ctrl">
@@ -26,6 +26,7 @@
                 <span class="newton-text">Newton idle</span>
             </div>
             <span class="muted small" id="status-dot">● idle</span>
+            <button type="button" id="about-open" class="ghost-btn">How it works</button>
             <button id="play-toggle" class="play-toggle" aria-label="Start replay">Start</button>
         </div>
     </header>
@@ -75,6 +76,8 @@
             </div>
         </div>
     </section>
+
+    {% include '_how_it_works.html' %}
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>

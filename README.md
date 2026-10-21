@@ -121,7 +121,7 @@ near-instant, so classification begins right away.
 
 ## Using the UI
 
-- **Top bar**: Archetype AI wordmark · title · live `Building reference library…` / `Newton analysing` / `Newton complete` status pill · connection-state dot (`idle` → `streaming` → `ready`) · **Start / Stop** button.
+- **Top bar**: Archetype AI wordmark · title · live `Building reference library…` / `Newton analysing` / `Newton complete` status pill · connection-state dot (`idle` → `streaming` → `ready`) · **How it works** button (opens a diagram of the offline library, per-window classification and fault-brief flows) · **Start / Stop** button.
 - **Timeline strip**: simulated date range with a cursor that advances per tick; `t-now` mono readout on the right.
 - **Per-turbine panel** (left and right of the feed):
   - `ANALYSING` / `HEALTHY` / `FAULT` state badge (driven by Newton's *debounced* state).
@@ -238,6 +238,7 @@ projections.py                 # PCA-2 of the library + leave-one-out KNN accura
 data_loader.py                 # CSV reader, window slicing, hourly downsampling
 templates/index.html           # Topbar + timeline + 3-column grid
 templates/_turbine_card.html   # Reusable panel: state badge, SVG, stats, spark
+templates/_how_it_works.html   # "How it works" dialog: inline SVG pipeline diagram
 templates/_wordmark.svg        # Archetype AI wordmark (inlined for currentColor)
 static/style.css               # OKLCH tokens, Geist fonts, sharp radii, FlatLogItem feed
 static/app.js                  # SSE consumer, panel updates, rotor RAF loop, Chart.js spark + embedding scatters
